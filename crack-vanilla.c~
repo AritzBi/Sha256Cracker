@@ -10,6 +10,18 @@
 #define MAX 8
 #define ALPHABET "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
+void next(char *str, char* alphabet);
+
+void nextR(char *str, char* alphabet, int repetitions) {
+  int i;
+  //printf("Me viene %s\n", str);
+  for ( i = 0; i < repetitions; i++)
+  {
+	next(str, alphabet);
+  }
+  //printf("Devuelvo %s\n", str);
+}
+
 // Función que recibe un string y un alfabeto y actualiza ese string con la siguiente
 // clave candidata en función del alfabeto
 void next(char *str, char* alphabet) {
@@ -91,6 +103,7 @@ int main(int argc, char *argv[]) {
   // Variables para procesar los parámetros con getopt
   int index;
   int c;
+  int found=0;
 
   opterr = 0;
   // Mientras que queden parámetros por procesar, miramos si hay un -a ALGO -n ALGO o -M ALGO
@@ -141,32 +154,72 @@ printf("%d \n",argc);
   if (strlen(secret) == HASHLENGTH+1) { 
     // Sí, pues vamos a generar candidatos, a hashearlos y a compararlos con el secreto
     // hasta encontrarlo o pasarnos del tamaño máximo
-    candidate = (char *)malloc(sizeof(char) * max);
-    memset(candidate, 0, max);
+    //candidate = (char *)malloc(sizeof(char) * max);
+    //memset(candidate, 0, max);
     // Empecemos por la primera letra del alfabeto
-    candidate[0] = alphabet[0];
-    compute_hash(candidate, hash);
-    printf("Starting the searching of candidates:");
+    //candidate[0] = alphabet[0];
+    //compute_hash(candidate, hash);
+    printf("Starting the searching of candidates:\n");
     
-    while (strncmp(hash, secret, HASHLENGTH) != 0 && strlen(candidate) <= max) {
-      //printf("%d",HASHLENGTH);
-      //printf("Secreto obtenido %s\n", secret);
-      //printf("Hash obtenido %s\n", hash);
-      //printf("Size secret %d\n", strlen(secret) );
-      //printf("Size hash %d\n", strlen(hash) );
-      int result = strncmp(hash, secret, HASHLENGTH);
-      //printf("Result %i\n", result );
-      next(candidate, alphabet);
-      compute_hash(candidate, hash);
-      //printf("Hash obtenido %s\n", hash);
-      //print_hash(hash);
-    }
+    #pragma omp parallel private(candidate,hash) shared(found,secret)
+    {
+  	candidate = (char *)malloc(sizeof(char) * max);
+    	memset(candidate, 0, max);
+
+        int myId, numberThreads;
+        //obtener datos del hilo
+        myId=omp_get_thread_num();
+        numberThreads =omp_get_num_threads();
+ 	printf("Soy hilo %d y tenga variable candidato a %s\n", myId, candidate);
+	candidate[0] = alphabet[myId];
+        printf("Soy hilo %d y me llevo la letra %s\n", myId, candidate);
+        compute_hash(candidate, hash);
+	printf("Soy hilo %d y me llevo la letra %s\n", myId, candidate);
+
+	while (strncmp(hash, secret, HASHLENGTH) != 0 && found == 0 && strlen(candidate) <= max) {
+	      //printf("%d",HASHLENGTH);
+	      //printf("Secreto obtenido %s\n", secret);
+	      //printf("Hash obtenido %s\n", hash);
+	      //printf("Size secret %d\n", strlen(secret) );
+	      //printf("Size hash %d\n", strlen(hash) );
+              printf("Candidato %s del hilo %d\n", candidate, myId);
+	      int result = strncmp(hash, secret, HASHLENGTH);
+	      //printf("Result %i\n", result );
+	      nextR(candidate, alphabet, numberThreads );
+	      compute_hash(candidate, hash);
+	      //printf("Hash obtenido %s\n", hash);
+	      //print_hash(hash);
+	 }
+	 
+	if ( strlen(candidate) > max )
+        {
+	  printf("Candidato %s sobrepasa el maximo %d\n", candidate, max);
+	}
+         if (strncmp(hash, secret, HASHLENGTH) == 0)
+         {
+           printf("Secreto obtenido %s\n", secret);
+	   printf("Hash obtenido %s\n", hash);
+	  printf("Size secret %d\n", strlen(secret) );
+	   printf("Size hash %d\n", strlen(hash) );
+         }
+	 
+       	 if ( strlen(candidate) < max && strncmp(hash, secret, HASHLENGTH) == 0 && found == 0 )
+	 {
+           found = 1;
+	   printf("Associated hash %s\n", hash);
+           printf("FOUND! hash(%s) = %s\n", candidate, secret);
+         }
+	  free(candidate);   
+     }
+
+    
     // Si hemos salido del bucle anterior puede que nos hayamos pasado del máximo
-    if (strlen(candidate) > max)
+    //if (strlen(candidate) > max)
+    if ( found == 0 )
       printf("Not found :(\n");
-    else 
-      printf("FOUND! hash(%s) = %s\n", candidate, secret);
-   free(candidate); // Save the whales and free your mallocs!
+    //else 
+      //printf("FOUND! hash(%s) = %s\n", candidate, secret);
+   //free(candidate); // Save the whales and free your mallocs!
   } else {
     printf("Error, usage: %s [-a \"ALPHABET\"] [-n MIN] [-m MAX] <hash>\n", argv[0]);
     return -1;
