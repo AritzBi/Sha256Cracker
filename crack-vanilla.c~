@@ -12,16 +12,6 @@
 
 void next(char *str, char* alphabet);
 
-void nextR(char *str, char* alphabet, int repetitions) {
-  int i;
-  //printf("Me viene %s\n", str);
-  for ( i = 0; i < repetitions; i++)
-  {
-	next(str, alphabet);
-  }
-  //printf("Devuelvo %s\n", str);
-}
-
 // Función que recibe un string y un alfabeto y actualiza ese string con la siguiente
 // clave candidata en función del alfabeto
 void next(char *str, char* alphabet) {
@@ -31,7 +21,7 @@ void next(char *str, char* alphabet) {
 
   // Empezamos en la última letra del string y de ahí hacia atrás
   for (i = strlen(str)-1; i >= 0; i--) {
-    // Si es una letra diferente a la última del alfabeto, es muy fácil, basta con poner la siguiente
+    // Si es una letra diferente a la última del alfabeto, es muy fácil, basta 		con poner la siguiente
     if (str[i] != alphabet[len-1]) {
       ptr = strchr(alphabet, str[i]);
       pos = ptr - alphabet + 1;
@@ -50,44 +40,39 @@ void next(char *str, char* alphabet) {
   }
 }
 
-void print_hash(unsigned char hash[])
-{
-   int idx;
-   for (idx=0; idx < 32; idx++)
-      printf("%02x",hash[idx]);
-   printf("\n");
+//Función utilizada para ir saltando por el conjunto de claves candidatas
+void nextR(char *str, char* alphabet, int repetitions) {
+  int i;
+  for ( i = 0; i < repetitions; i++)
+	next(str, alphabet);
 }
 
+//Función utilizada para pasar de un array de bytes a hexadecimal
 void bin_to_strhex(unsigned char *bin, unsigned int binsz, unsigned char result[HASHLENGTH+1] )
 {
   char hex_str[]= "0123456789abcdef";
   unsigned int  i;
-
-  //result = (char *)malloc(binsz * 2 + 1);
   (result)[binsz * 2] = 0;
 
   if (!binsz)
     return;
 
   for (i = 0; i < binsz; i++)
-    {
+  {
       (result)[i * 2 + 0] = hex_str[(bin[i] >> 4) & 0x0F];
       (result)[i * 2 + 1] = hex_str[(bin[i]     ) & 0x0F];
-    }  
+  }  
 }
 
 void compute_hash(char *str, unsigned char hash[HASHLENGTH+1] ) {
   // Hacer aquí el cómputo del hash de str y guardarlo en hash[]
-  unsigned char hashAux[32];
+   unsigned char hashAux[32];
    SHA256_CTX ctx;
    sha256_init(&ctx);
    sha256_update(&ctx,str,strlen(str));
-   //printf("For candidate %s\n", str);
    sha256_final(&ctx,hashAux);
-   //printf("Hash en bytes \n");
-   //print_hash(hashAux);
+   //Guardamos sobre hashAux el hash computado y lo pasamos a hexadecimal
    bin_to_strhex( (unsigned char *)hashAux, sizeof(hashAux), hash);
-   //printf("Hash en String %s\n", hash);
 }
 
 int main(int argc, char *argv[]) {
@@ -106,8 +91,8 @@ int main(int argc, char *argv[]) {
   int found=0;
 
   opterr = 0;
-  // Mientras que queden parámetros por procesar, miramos si hay un -a ALGO -n ALGO o -M ALGO
-  // Si hay alguno de estos parámetros lo almacenamos en la variable que corresponda
+  // Mientras que queden parámetros por procesar, miramos si hay un -a ALGO -n 		ALGO o -M ALGO
+  // Si hay alguno de estos parámetros lo almacenamos en la variable que 		corresponda
   while ((c = getopt (argc, argv, "a:n:m:")) != -1)
     switch (c) {
       case 'a':
@@ -138,10 +123,10 @@ printf("%d \n",argc);
     strncpy(secret, argv[optind], HASHLENGTH);
     printf("Secreto obtenido %s\n", secret);
   } else {
-    // Si no hay hash o hay más de uno, guardamos en secret un NULL para protestar luego
+    // Si no hay hash o hay más de uno, guardamos en secret un NULL para 		protestar luego
     secret[0] = '\0';
   }
-  // Si no nos han pasado algún parámetro, los inicializamos a valores por defecto (defines)
+  // Si no nos han pasado algún parámetro, los inicializamos a valores por 		defecto (defines)
   if (min == -1)
     min = MIN;
   if (max == -1)
@@ -152,74 +137,64 @@ printf("%d \n",argc);
   printf("%d\n",strlen(secret));
   // ¿El hash que nos han pasado tiene el tamaño adecuado?
   if (strlen(secret) == HASHLENGTH+1) { 
-    // Sí, pues vamos a generar candidatos, a hashearlos y a compararlos con el secreto
+    // Sí, pues vamos a generar candidatos, a hashearlos y a compararlos con el 	secreto
     // hasta encontrarlo o pasarnos del tamaño máximo
-    //candidate = (char *)malloc(sizeof(char) * max);
-    //memset(candidate, 0, max);
-    // Empecemos por la primera letra del alfabeto
-    //candidate[0] = alphabet[0];
-    //compute_hash(candidate, hash);
     printf("Starting the searching of candidates:\n");
     
-    #pragma omp parallel private(candidate,hash) shared(found,secret)
+    //Paralelizamos para ir encontrando soluciones candidatas e ir comprobando 		con el hash introducido
+    //found --> variable compartida para saber si se ha encontrado ya la clave 		asociada al hash
+    //candidate --> variable privada a la que se asigna diferente espacio de 		memoria por hilo
+    //hash --> variable privada para ir almacenando el hash de las soluciones 		candidatas procesadas
+    #pragma omp parallel private(candidate,hash) shared(found)
     {
-  	candidate = (char *)malloc(sizeof(char) * max);
-    	memset(candidate, 0, max);
+	//Inicializamos la variable candidate y le asignamos espacio de memoria
+  	candidate = (char *)malloc(sizeof(char) * max);   	
+	memset(candidate, 0, max);
 
-        int myId, numberThreads;
-        //obtener datos del hilo
+        int i, myId, numberThreads;
+	//obtenemos el id del hilo
         myId=omp_get_thread_num();
+	//obtenemos el total de hilos
         numberThreads =omp_get_num_threads();
- 	printf("Soy hilo %d y tenga variable candidato a %s\n", myId, candidate);
-	candidate[0] = alphabet[myId];
-        printf("Soy hilo %d y me llevo la letra %s\n", myId, candidate);
+	//Calculamos la primera clave candidata que tiene que procesar cada hilo
+	for ( i = 0; i < min; i++)
+        {
+            if ( i == (min-1) )
+	       candidate[i] = alphabet[myId];
+            else
+               candidate[i] = alphabet[0];
+        }
+        //printf("Soy hilo %d y me llevo la clave inicial %s\n", myId, 			candidate);
         compute_hash(candidate, hash);
-	printf("Soy hilo %d y me llevo la letra %s\n", myId, candidate);
-
-	while (strncmp(hash, secret, HASHLENGTH) != 0 && found == 0 && strlen(candidate) <= max) {
-	      //printf("%d",HASHLENGTH);
-	      //printf("Secreto obtenido %s\n", secret);
-	      //printf("Hash obtenido %s\n", hash);
-	      //printf("Size secret %d\n", strlen(secret) );
-	      //printf("Size hash %d\n", strlen(hash) );
+	
+	//se sigue realizando la comprobación hasta que no se encuentre una 		clave candidata co el mismo hash u otro hilo haya encontrada ya la 		solución o el tamaño del candidato se pase del máximo permitido
+	while (strncmp(hash, secret, HASHLENGTH) != 0 
+			&& found == 0 
+				&& strlen(candidate) <= max) 
+	{
               printf("Candidato %s del hilo %d\n", candidate, myId);
-	      int result = strncmp(hash, secret, HASHLENGTH);
-	      //printf("Result %i\n", result );
+	      //Buscamos el siguiente candidato que tiene que procesar el hilo
 	      nextR(candidate, alphabet, numberThreads );
+	      //Calculamos el hash correspondiente a la clave
 	      compute_hash(candidate, hash);
-	      //printf("Hash obtenido %s\n", hash);
-	      //print_hash(hash);
 	 }
 	 
-	if ( strlen(candidate) > max )
-        {
-	  printf("Candidato %s sobrepasa el maximo %d\n", candidate, max);
-	}
-         if (strncmp(hash, secret, HASHLENGTH) == 0)
-         {
-           printf("Secreto obtenido %s\n", secret);
-	   printf("Hash obtenido %s\n", hash);
-	  printf("Size secret %d\n", strlen(secret) );
-	   printf("Size hash %d\n", strlen(hash) );
-         }
-	 
-       	 if ( strlen(candidate) < max && strncmp(hash, secret, HASHLENGTH) == 0 && found == 0 )
+	//si salimos del bucle y el length del candidato no es mayor que el 		máximo y la variable found está a 0, significa que se ha encontrado 		la solución!! Si está a 1 es que se ha salido del bucle porque otro hilo 		ya la ha encontrado
+       	 if ( strlen(candidate) <= max 
+		&& strncmp(hash, secret, HASHLENGTH) == 0 
+			&& found == 0 )
 	 {
            found = 1;
 	   printf("Associated hash %s\n", hash);
            printf("FOUND! hash(%s) = %s\n", candidate, secret);
          }
+	  //liberamos el espacio de memoria de la variable candidate
 	  free(candidate);   
      }
 
-    
-    // Si hemos salido del bucle anterior puede que nos hayamos pasado del máximo
-    //if (strlen(candidate) > max)
+    //Si se han ejecutado todos los hilos, y found sigue a 0 significa que no se 	ha encontrado solución
     if ( found == 0 )
       printf("Not found :(\n");
-    //else 
-      //printf("FOUND! hash(%s) = %s\n", candidate, secret);
-   //free(candidate); // Save the whales and free your mallocs!
   } else {
     printf("Error, usage: %s [-a \"ALPHABET\"] [-n MIN] [-m MAX] <hash>\n", argv[0]);
     return -1;
