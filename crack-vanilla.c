@@ -158,13 +158,15 @@ printf("%d \n",argc);
         numberThreads =omp_get_num_threads();
 	//Calculamos la primera clave candidata que tiene que procesar cada hilo
 	for ( i = 0; i < min; i++)
+	{
+		candidate[i] = alphabet[0];
+	}
+	if ( myId != 0 )
         {
-            if ( i == (min-1) )
-	       candidate[i] = alphabet[myId];
-            else
-               candidate[i] = alphabet[0];
-        }
-        //printf("Soy hilo %d y me llevo la clave inicial %s\n", myId, 			candidate);
+	        nextR(candidate, alphabet, myId );
+	}
+
+        printf("Soy hilo %d y me llevo la clave inicial %s\n", myId, 			candidate);
         compute_hash(candidate, hash);
 	
 	//se sigue realizando la comprobación hasta que no se encuentre una 		clave candidata co el mismo hash u otro hilo haya encontrada ya la 		solución o el tamaño del candidato se pase del máximo permitido
@@ -172,7 +174,7 @@ printf("%d \n",argc);
 			&& found == 0 
 				&& strlen(candidate) <= max) 
 	{
-              printf("Candidato %s del hilo %d\n", candidate, myId);
+              //printf("Candidato %s del hilo %d\n", candidate, myId);
 	      //Buscamos el siguiente candidato que tiene que procesar el hilo
 	      nextR(candidate, alphabet, numberThreads );
 	      //Calculamos el hash correspondiente a la clave

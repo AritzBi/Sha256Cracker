@@ -11,8 +11,6 @@
 #define MAX 8
 #define ALPHABET "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
-void next(char *str, char* alphabet);
-
 // Función que recibe un string y un alfabeto y actualiza ese string con la siguiente
 // clave candidata en función del alfabeto
 void next(char *str, char* alphabet) {
@@ -90,9 +88,15 @@ int main(int argc, char *argv[]) {
   int index;
   int c;
   int found=0;
+  int reducer=0;
   MPI_Status Stat;
   int numtasks, rank;
   opterr = 0;
+
+  MPI_Init(&argc,&argv);
+  MPI_Comm_size(MPI_COMM_WORLD, &numtasks);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
   // Mientras que queden parámetros por procesar, miramos si hay un -a ALGO -n 		ALGO o -M ALGO
   // Si hay alguno de estos parámetros lo almacenamos en la variable que 		corresponda
   while ((c = getopt (argc, argv, "a:n:m:")) != -1)
@@ -137,30 +141,31 @@ printf("%d \n",argc);
     alphabet = ALPHABET;
   }
   printf("%d\n",strlen(secret));
+
+
+  printf("Soy el proceso %d y mi secreto es %s\n", rank, secret); 
   // ¿El hash que nos han pasado tiene el tamaño adecuado?
   if (strlen(secret) == HASHLENGTH+1) { 
     // Sí, pues vamos a generar candidatos, a hashearlos y a compararlos con el 	secreto
     // hasta encontrarlo o pasarnos del tamaño máximo
     printf("Starting the searching of candidates:\n");
     
-	MPI_Init(&argc,&argv);
-	MPI_Comm_size(MPI_COMM_WORLD, &numtasks);
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-	//Inicializamos la variable candidate y le asignamos espacio de memoria
-	candidate = (char *)malloc(sizeof(char) * max);   	
-	memset(candidate, 0, max);
+    //Inicializamos la variable candidate y le asignamos espacio de memoria
+    candidate = (char *)malloc(sizeof(char) * max);   	
+    memset(candidate, 0, max);
 	
 	int i;
 	//Calculamos la primera clave candidata que tiene que procesar cada hilo
 	for ( i = 0; i < min; i++)
 	{
-	    if ( i == (min-1) )
-	       candidate[i] = alphabet[rank];
-	    else
-	       candidate[i] = alphabet[0];
+		candidate[i] = alphabet[0];
 	}
-	//printf("Soy hilo %d y me llevo la clave inicial %s\n", myId, 			candidate);
+	if ( rank != 0 )
+        {
+	        nextR(candidate, alphabet, rank );
+	}
+
+	printf("Soy proceso %d y me llevo la clave inicial %s\n", rank, candidate);
 	compute_hash(candidate, hash);
 
 	//se sigue realizando la comprobación hasta que no se encuentre una 		clave candidata co el mismo hash u otro hilo haya encontrada ya la 		solución o el tamaño del candidato se pase del máximo permitido
@@ -168,7 +173,7 @@ printf("%d \n",argc);
 			&& found == 0 
 				&& strlen(candidate) <= max) 
 	{
-	      printf("Candidato %s del proceso %d\n", candidate, rank);
+	      //printf("Candidato %s del proceso %d\n", candidate, rank);
 	      //Buscamos el siguiente candidato que tiene que procesar el hilo
 	      nextR(candidate, alphabet, numtasks );
 	      //Calculamos el hash correspondiente a la clave
@@ -209,8 +214,10 @@ printf("%d \n",argc);
 	  //liberamos el espacio de memoria de la variable candidate
 	  free(candidate);
 
+    MPI_Reduce(&found,&reducer,1,MPI_INT,MPI_SUM,0,MPI_COMM_WORLD);
+
     //Si se han ejecutado todos los hilos, y found sigue a 0 significa que no se 	ha encontrado solución
-    if ( found == 0 && rank == 0)
+    if ( reducer < 1 && rank == 0 )
       printf("Not found :(\n");
   } else {
     printf("Error, usage: %s [-a \"ALPHABET\"] [-n MIN] [-m MAX] <hash>\n", argv[0]);
